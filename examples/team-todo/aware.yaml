@@ -1,0 +1,12 @@
+schema_version: 1
+project: team-todo
+source:
+  command: delete_task
+  uri: repo://team-todo/src/lib/aria/commands.ts#delete_task
+policy:
+  safety_class: unclassified
+  confirmation_policy: unresolved
+notes:
+  - Imported command metadata is visible but cannot execute until classified.
+  - The source application is not modified by this adapter.
+

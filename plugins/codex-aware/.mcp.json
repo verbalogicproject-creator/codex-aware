@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "codex-aware": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["${PLUGIN_ROOT}/scripts/mcp_server.py"]
+    }
+  }
+}

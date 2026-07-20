@@ -1,0 +1,27 @@
+{
+  "name": "codex-aware",
+  "version": "0.1.0",
+  "description": "Give Codex durable semantic context from a running application.",
+  "author": {
+    "name": "Eyal Nof / Verbalogic"
+  },
+  "license": "Apache-2.0",
+  "repository": "https://github.com/verbalogicproject-creator/codex-aware",
+  "keywords": ["context", "semantic-graph", "continuity", "receipts", "mcp"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Codex Aware",
+    "shortDescription": "Point at software. Codex knows what you mean.",
+    "longDescription": "Attaches Codex to application-owned semantic identity, authority gates, live effects, and causal receipts.",
+    "developerName": "Eyal Nof / Verbalogic",
+    "category": "Productivity",
+    "capabilities": ["Context", "MCP", "Interactive", "Write"],
+    "defaultPrompt": [
+      "What am I pointing at in Codex Aware?",
+      "Reveal the blast radius of my selection.",
+      "Inspect the latest continuity receipt."
+    ],
+    "brandColor": "#67D8FF"
+  },
+  "mcpServers": "./.mcp.json"
+}

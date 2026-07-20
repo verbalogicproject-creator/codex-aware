@@ -1,0 +1,23 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - deploy/web/Dockerfile
+      - --build-arg
+      - NEXT_PUBLIC_AWARE_API_URL=${_API_URL}
+      - -t
+      - me-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/codex-aware-web:${_TAG}
+      - .
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - me-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/codex-aware-web:${_TAG}
+images:
+  - me-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/codex-aware-web:${_TAG}
+substitutions:
+  _API_URL: https://codex-aware-jchnbap7ea-zf.a.run.app
+  _TAG: latest
+options:
+  logging: CLOUD_LOGGING_ONLY
+

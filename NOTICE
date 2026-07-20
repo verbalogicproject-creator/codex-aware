@@ -1,0 +1,10 @@
+Codex Aware
+Copyright 2026 Eyal Nof / Verbalogic
+
+This product is a new clean implementation informed by the author's prior
+NLKE, KG Factory, SAG/Declarum, and Command Center architectural research.
+Those prior implementations are not redistributed as dependencies.
+
+The example project names and bounded command metadata refer to pre-existing
+user-owned applications. Their source code and credentials are not included.
+

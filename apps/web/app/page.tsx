@@ -1,0 +1,447 @@
+"use client";
+
+import {
+  Background,
+  Controls,
+  Edge,
+  MiniMap,
+  Node,
+  ReactFlow,
+  ReactFlowProvider,
+  useReactFlow,
+} from "@xyflow/react";
+import {
+  Activity,
+  ArrowLeft,
+  Check,
+  ChevronRight,
+  CircleDot,
+  Copy,
+  Focus,
+  Link2,
+  Network,
+  RefreshCw,
+  RotateCcw,
+  ShieldCheck,
+  TerminalSquare,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+type Safety = "safe" | "protected" | "browser_only" | "forbidden" | "unclassified";
+type ApiNode = {
+  id: string;
+  kind: string;
+  label: string;
+  project?: string;
+  uri?: string;
+  safety_class?: Safety;
+  summary?: string;
+  x: number;
+  y: number;
+  metadata: Record<string, unknown>;
+};
+type ApiEdge = { id: string; source: string; target: string; kind: string; label?: string };
+type Receipt = {
+  id: string;
+  trace_id: string;
+  command: string;
+  status: string;
+  payload: {
+    proposal?: {
+      id: string;
+      proposal_hash: string;
+      payload: Record<string, string>;
+      status: string;
+    };
+    directive?: { id: string; kind: string; target_ids: string[] };
+    observed_effect?: Record<string, unknown>;
+    test_result?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  created_at: number;
+};
+
+const API = process.env.NEXT_PUBLIC_AWARE_API_URL || "http://localhost:8000";
+const WORKSPACE = "default";
+const incidentIds = ["command:team-todo:delete_task", "command:neon-battleship:fire_at"];
+
+function safetyColor(safety?: Safety) {
+  if (safety === "protected") return "#62e6a6";
+  if (safety === "unclassified") return "#ffbc5b";
+  if (safety === "forbidden") return "#ff6d7a";
+  if (safety === "safe") return "#67d8ff";
+  return "#8ea0b7";
+}
+
+function AppNode({ data, selected }: { data: ApiNode; selected: boolean }) {
+  return (
+    <div className={`graph-node kind-${data.kind} ${selected ? "selected" : ""}`} style={{ "--node-accent": safetyColor(data.safety_class) } as React.CSSProperties}>
+      <span className="node-kind">{data.kind}</span>
+      <strong>{data.label}</strong>
+      {data.safety_class && <span className={`policy policy-${data.safety_class}`}>{data.safety_class.replace("_", " ")}</span>}
+      {data.summary && <small>{data.summary}</small>}
+    </div>
+  );
+}
+
+const nodeTypes = { aware: AppNode };
+
+function Workspace() {
+  const [apiNodes, setApiNodes] = useState<ApiNode[]>([]);
+  const [apiEdges, setApiEdges] = useState<ApiEdge[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [highlighted, setHighlighted] = useState<string[]>([]);
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [pairCode, setPairCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [lens, setLens] = useState<"portfolio" | "incident" | "receipt">("portfolio");
+  const [activeReceipt, setActiveReceipt] = useState<Receipt | null>(null);
+  const [context, setContext] = useState<Record<string, unknown> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("Select a node to establish shared context.");
+  const ws = useRef<WebSocket | null>(null);
+  const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { fitView } = useReactFlow();
+
+  const fetchGraph = useCallback(async () => {
+    const response = await fetch(`${API}/api/workspaces/${WORKSPACE}/graph`);
+    if (!response.ok) throw new Error("Graph unavailable");
+    const graph = await response.json();
+    setApiNodes(graph.nodes);
+    setApiEdges(graph.edges);
+  }, []);
+
+  const fetchReceipts = useCallback(async () => {
+    const response = await fetch(`${API}/api/workspaces/${WORKSPACE}/receipts`);
+    if (response.ok) setReceipts(await response.json());
+  }, []);
+
+  const connect = useCallback(() => {
+    const socketUrl = API.replace(/^http/, "ws") + `/ws/${WORKSPACE}`;
+    const socket = new WebSocket(socketUrl);
+    ws.current = socket;
+    socket.onopen = () => {
+      setConnected(true);
+      socket.send("ready");
+      if (pingTimer.current) clearInterval(pingTimer.current);
+      pingTimer.current = setInterval(() => {
+        if (socket.readyState === WebSocket.OPEN) socket.send("poll");
+      }, 650);
+    };
+    socket.onclose = () => {
+      setConnected(false);
+      if (pingTimer.current) clearInterval(pingTimer.current);
+      window.setTimeout(connect, 1800);
+    };
+    socket.onmessage = async (message) => {
+      const event = JSON.parse(message.data);
+      if (event.kind === "directive.issued" && event.payload.kind === "graph.reveal") {
+        const targets: string[] = event.payload.target_ids;
+        setHighlighted(targets);
+        setLens("incident");
+        setNotice(`Observed blast radius across ${targets.length} semantic entities.`);
+        await fetch(`${API}/api/workspaces/${WORKSPACE}/effects`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            receipt_id: event.payload.receipt_id,
+            directive_id: event.payload.id,
+            observed: { target_count: targets.length, target_ids: targets },
+          }),
+        });
+      }
+      if (event.kind === "repository.refreshed") {
+        await fetchGraph();
+        setNotice("Policy source, test, and graph now agree.");
+      }
+      await fetchReceipts();
+      socket.send("next");
+    };
+  }, [fetchGraph, fetchReceipts]);
+
+  useEffect(() => {
+    fetchGraph().then(() => window.setTimeout(() => fitView({ padding: 0.16 }), 100));
+    fetchReceipts();
+    connect();
+    return () => {
+      if (pingTimer.current) clearInterval(pingTimer.current);
+      ws.current?.close();
+    };
+  }, [connect, fetchGraph, fetchReceipts, fitView]);
+
+  const nodes: Node[] = useMemo(
+    () =>
+      apiNodes.map((node) => ({
+        id: node.id,
+        type: "aware",
+        position: { x: node.x, y: node.y },
+        data: node,
+        selected: selected.includes(node.id),
+        className: highlighted.includes(node.id) ? "blast-node" : "",
+      })),
+    [apiNodes, highlighted, selected],
+  );
+
+  const edges: Edge[] = useMemo(
+    () =>
+      apiEdges.map((edge) => ({
+        ...edge,
+        label: edge.label || edge.kind.replace("_", " "),
+        animated: highlighted.includes(edge.source) && highlighted.includes(edge.target),
+        style: { stroke: highlighted.includes(edge.source) && highlighted.includes(edge.target) ? "#67d8ff" : "#314256", strokeWidth: 1.5 },
+        labelStyle: { fill: "#76889d", fontSize: 9 },
+      })),
+    [apiEdges, highlighted],
+  );
+
+  const chooseNodes = async (ids: string[]) => {
+    setSelected(ids);
+    const response = await fetch(`${API}/api/workspaces/${WORKSPACE}/selection`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ node_ids: ids }),
+    });
+    const data = await response.json();
+    const contextResponse = await fetch(`${API}/api/workspaces/${WORKSPACE}/context`);
+    setContext(await contextResponse.json());
+    setNotice(`${data.selection.length} stable ${data.selection.length === 1 ? "identity" : "identities"} shared with attached actors.`);
+  };
+
+  const createPair = async () => {
+    const response = await fetch(`${API}/api/workspaces/${WORKSPACE}/pair`, { method: "POST" });
+    const data = await response.json();
+    setPairCode(data.code);
+  };
+
+  const copyCode = async () => {
+    if (!pairCode) return;
+    await navigator.clipboard.writeText(pairCode);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
+
+  const act = async (command: string, arguments_: Record<string, unknown> = {}) => {
+    setBusy(true);
+    try {
+      const response = await fetch(`${API}/api/workspaces/${WORKSPACE}/actions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ command, arguments: arguments_ }),
+      });
+      const receipt = await response.json();
+      if (!response.ok) throw new Error(receipt.detail || "Action failed");
+      await fetchReceipts();
+      setActiveReceipt(receipt);
+      setNotice(receipt.status === "awaiting_approval" ? "Human authority is required for this durable policy change." : "Semantic directive issued; waiting for observed effect.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Action failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const approve = async (receipt: Receipt, decision: "approved" | "rejected") => {
+    if (!receipt.payload.proposal) return;
+    const proposal = receipt.payload.proposal;
+    const response = await fetch(`${API}/api/workspaces/${WORKSPACE}/proposals/${proposal.id}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ proposal_hash: proposal.proposal_hash, decision }),
+    });
+    if (!response.ok) {
+      setNotice("The proposal is stale or no longer matches this approval.");
+      return;
+    }
+    setNotice(decision === "approved" ? "Approved once. Codex may now apply the exact adapter patch." : "Proposal rejected. No source or policy changed.");
+    await fetchReceipts();
+  };
+
+  const reset = async () => {
+    await fetch(`${API}/api/workspaces/${WORKSPACE}/reset`, { method: "POST" });
+    setSelected([]);
+    setHighlighted([]);
+    setActiveReceipt(null);
+    setContext(null);
+    setLens("portfolio");
+    setPairCode(null);
+    await Promise.all([fetchGraph(), fetchReceipts()]);
+    setNotice("Workspace reset to its original unresolved state.");
+    window.setTimeout(() => fitView({ padding: 0.16 }), 80);
+  };
+
+  const revealArchitecture = async (receipt: Receipt) => {
+    const response = await fetch(`${API}/api/workspaces/${WORKSPACE}/architecture`);
+    const graph = await response.json();
+    setApiNodes(graph.nodes);
+    setApiEdges(graph.edges);
+    setSelected([]);
+    setHighlighted(["aware:receipt"]);
+    setActiveReceipt(receipt);
+    setLens("receipt");
+    setNotice("This receipt is part of the same graph that explains how it was produced.");
+    window.setTimeout(() => fitView({ padding: 0.2 }), 100);
+  };
+
+  const returnToWorkspace = async () => {
+    await fetchGraph();
+    setLens("portfolio");
+    setHighlighted([]);
+    setActiveReceipt(null);
+    window.setTimeout(() => fitView({ padding: 0.16 }), 80);
+  };
+
+  const selectedNodes = apiNodes.filter((node) => selected.includes(node.id));
+  const pendingReceipt = receipts.find((receipt) => receipt.status === "awaiting_approval");
+
+  return (
+    <main>
+      <header>
+        <div className="brand">
+          <div className="brand-mark"><CircleDot size={22} /></div>
+          <div><strong>Codex Aware</strong><span>Application continuity</span></div>
+        </div>
+        <div className="header-actions">
+          <span className={`connection ${connected ? "online" : ""}`} role="status">
+            <span />{connected ? "Live" : "Reconnecting"}
+          </span>
+          <button className="secondary" onClick={reset} aria-label="Reset workspace"><RotateCcw size={16} /> Reset</button>
+          <button className="primary" onClick={createPair}><Link2 size={16} /> Pair Codex</button>
+        </div>
+      </header>
+
+      <section className="hero">
+        <div>
+          <p className="eyebrow">SEMANTIC CONTINUITY FOR RUNNING SOFTWARE</p>
+          <h1>Point at your running software.<br /><span>Codex already knows what you mean.</span></h1>
+        </div>
+        <div className="lens-switch" aria-label="Workspace lens">
+          {(["portfolio", "incident", "receipt"] as const).map((item) => (
+            <button key={item} className={lens === item ? "active" : ""} onClick={() => setLens(item)}>{item}</button>
+          ))}
+        </div>
+      </section>
+
+      <section className="workspace">
+        <div className="canvas-shell">
+          <div className="canvas-toolbar">
+            {lens === "receipt" ? (
+              <button className="text-button" onClick={returnToWorkspace}><ArrowLeft size={15} /> Back to applications</button>
+            ) : (
+              <>
+                <button className="text-button" onClick={() => chooseNodes(incidentIds)}><Focus size={15} /> Select active incident</button>
+                <span>Capability safety drift</span>
+              </>
+            )}
+          </div>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={nodeTypes}
+            onNodeClick={(_, node) => chooseNodes([node.id])}
+            onSelectionChange={({ nodes: chosen }) => {
+              const ids = chosen.map((node) => node.id);
+              if (ids.length) chooseNodes(ids);
+            }}
+            multiSelectionKeyCode="Shift"
+            fitView
+            minZoom={0.35}
+            maxZoom={1.8}
+            proOptions={{ hideAttribution: true }}
+          >
+            <Background color="#1f2b38" gap={28} size={1} />
+            <Controls showInteractive={false} />
+            <MiniMap nodeColor={(node) => safetyColor((node.data as unknown as ApiNode).safety_class)} maskColor="rgba(7,12,18,.72)" />
+          </ReactFlow>
+          <div className="status-strip" role="status"><Activity size={14} /> {notice}</div>
+        </div>
+
+        <aside>
+          {pairCode ? (
+            <div className="panel pair-panel">
+              <div className="panel-title"><TerminalSquare size={16} /> Attach an actor</div>
+              <p>Use this single-use code from the Codex Aware plugin. It expires in five minutes.</p>
+              <button className="pair-code" onClick={copyCode}>{pairCode}<span>{copied ? <Check size={15} /> : <Copy size={15} />}</span></button>
+              <button className="close-pair" onClick={() => setPairCode(null)} aria-label="Close pairing"><X size={16} /></button>
+            </div>
+          ) : (
+            <div className="panel">
+              <div className="panel-title"><Network size={16} /> Shared context</div>
+              {selectedNodes.length ? selectedNodes.map((node) => (
+                <div className="selection-card" key={node.id}>
+                  <span>{node.project || "Codex Aware"}</span>
+                  <strong>{node.label}</strong>
+                  <small>{node.uri || node.summary}</small>
+                  {node.safety_class && <em style={{ color: safetyColor(node.safety_class) }}>{node.safety_class.replace("_", " ")}</em>}
+                </div>
+              )) : <p>Select a node. Its stable identity—not screen coordinates—becomes shared context.</p>}
+              {context && <div className="context-proof"><ShieldCheck size={15} /><span>Grounded in application-owned identities</span></div>}
+            </div>
+          )}
+
+          {lens !== "receipt" && (
+            <div className="panel">
+              <div className="panel-title"><Activity size={16} /> Semantic actions</div>
+              <button className="action-row" disabled={busy || !selected.length} onClick={() => act("reveal_blast_radius")}>
+                <span><strong>Reveal blast radius</strong><small>Safe visual command</small></span><ChevronRight size={17} />
+              </button>
+              <button className="action-row" disabled={busy || !selected.includes(incidentIds[0])} onClick={() => act("classify_command", { node_id: incidentIds[0], safety_class: "protected", confirmation_policy: "human_approval" })}>
+                <span><strong>Propose safe boundary</strong><small>Human confirmation required</small></span><ChevronRight size={17} />
+              </button>
+            </div>
+          )}
+
+          {pendingReceipt?.payload.proposal && (
+            <div className="panel approval-panel">
+              <div className="panel-title"><ShieldCheck size={16} /> Approval required</div>
+              <p>Classify <code>delete_task</code> as protected and require human approval.</p>
+              <dl>
+                <div><dt>Target</dt><dd>Team Todo adapter</dd></div>
+                <div><dt>Scope</dt><dd>One policy field</dd></div>
+                <div><dt>Execution</dt><dd>No task is deleted</dd></div>
+              </dl>
+              <div className="approval-actions">
+                <button className="secondary" onClick={() => approve(pendingReceipt, "rejected")}>Reject</button>
+                <button className="approve" onClick={() => approve(pendingReceipt, "approved")}><Check size={15} /> Approve once</button>
+              </div>
+              <small className="hash">Proposal {pendingReceipt.payload.proposal.proposal_hash.slice(0, 12)}</small>
+            </div>
+          )}
+
+          <div className="panel receipts-panel">
+            <div className="panel-title"><CircleDot size={16} /> Continuity receipts</div>
+            {receipts.length === 0 ? <p>No actions yet. Receipts appear only after a declared request.</p> : receipts.slice(0, 5).map((receipt) => (
+              <button className="receipt-row" key={receipt.id} onClick={() => revealArchitecture(receipt)}>
+                <span className={`receipt-dot status-${receipt.status}`} />
+                <span><strong>{receipt.command.replaceAll("_", " ")}</strong><small>{receipt.status.replaceAll("_", " ")}</small></span>
+                <ChevronRight size={16} />
+              </button>
+            ))}
+          </div>
+
+          {lens === "receipt" && activeReceipt && (
+            <div className="panel receipt-detail">
+              <div className="panel-title"><ShieldCheck size={16} /> Causal receipt</div>
+              <dl>
+                <div><dt>Trace</dt><dd>{activeReceipt.trace_id.slice(0, 12)}</dd></div>
+                <div><dt>Status</dt><dd>{activeReceipt.status}</dd></div>
+                <div><dt>Grounding</dt><dd>Stable graph identities</dd></div>
+                <div><dt>Authority</dt><dd>{activeReceipt.payload.proposal ? "Browser human" : "Declared safe"}</dd></div>
+                <div><dt>Effect</dt><dd>{activeReceipt.payload.observed_effect ? "Observed" : "Pending"}</dd></div>
+              </dl>
+            </div>
+          )}
+        </aside>
+      </section>
+
+      <footer>
+        <span>Application-owned identity</span><span>Human authority</span><span>Observed effects</span><span>Durable continuity</span>
+      </footer>
+    </main>
+  );
+}
+
+export default function Home() {
+  return <ReactFlowProvider><Workspace /></ReactFlowProvider>;
+}

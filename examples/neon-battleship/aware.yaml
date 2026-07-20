@@ -1,0 +1,12 @@
+schema_version: 1
+project: neon-battleship
+source:
+  command: fire_at
+  uri: repo://neon-battleship/src/lib/aria/commands.ts#fire_at
+policy:
+  safety_class: protected
+  confirmation_policy: runtime_guard
+guards:
+  - phase == battle
+  - isPlayerTurn == true
+

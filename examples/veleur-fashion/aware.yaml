@@ -1,0 +1,9 @@
+schema_version: 1
+project: veleur-fashion
+source:
+  command: add_to_cart
+  uri: repo://veleur-fashion/src/lib/aria/commands.ts#add_to_cart
+policy:
+  safety_class: safe
+  confirmation_policy: none
+
