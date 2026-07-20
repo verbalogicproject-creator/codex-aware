@@ -137,6 +137,20 @@ class Store:
         )
         return [{**dict(r), "payload": json.loads(r["payload"])} for r in rows]
 
+    def latest_sequence(self, workspace_id: str) -> int:
+        row = self.db.execute(
+            "SELECT COALESCE(MAX(sequence), 0) AS sequence FROM events WHERE workspace_id=?",
+            (workspace_id,),
+        ).fetchone()
+        return int(row["sequence"])
+
+    def latest_event(self, workspace_id: str, kind: str) -> dict[str, Any] | None:
+        row = self.db.execute(
+            "SELECT * FROM events WHERE workspace_id=? AND kind=? ORDER BY sequence DESC LIMIT 1",
+            (workspace_id, kind),
+        ).fetchone()
+        return {**dict(row), "payload": json.loads(row["payload"])} if row else None
+
     def create_pair_code(self, workspace_id: str) -> str:
         code = f"{secrets.randbelow(1_000_000):06d}"
         self.db.execute("DELETE FROM pair_codes WHERE workspace_id=?", (workspace_id,))
@@ -209,4 +223,3 @@ class Store:
         self.db.execute("UPDATE proposals SET status=?,decided_at=? WHERE id=?", (status, now_ms(), proposal_id))
         self.db.commit()
         return self.proposal(workspace_id, proposal_id)
-

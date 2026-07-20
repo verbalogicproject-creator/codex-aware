@@ -83,13 +83,15 @@ def set_selection(workspace_id: str, request: SelectionRequest) -> dict[str, Any
     nodes = [store.node(workspace_id, node_id) for node_id in request.node_ids]
     if any(node is None for node in nodes):
         raise HTTPException(404, "One or more graph nodes do not exist")
+    if current_selection(workspace_id) == request.node_ids:
+        return {"selection": nodes, "event": None, "unchanged": True}
     event = store.event(workspace_id, "context.selection_changed", "browser", {"node_ids": request.node_ids})
-    return {"selection": nodes, "event": event}
+    return {"selection": nodes, "event": event, "unchanged": False}
 
 
 def current_selection(workspace_id: str) -> list[str]:
-    events = [event for event in store.events(workspace_id, 0, 200) if event["kind"] == "context.selection_changed"]
-    return events[-1]["payload"]["node_ids"] if events else []
+    event = store.latest_event(workspace_id, "context.selection_changed")
+    return event["payload"]["node_ids"] if event else []
 
 
 def bounded_context(workspace_id: str) -> dict[str, Any]:
@@ -284,14 +286,16 @@ def mcp(request: MCPRequest, authorization: str | None = Header(None)) -> dict[s
 @app.websocket("/ws/{workspace_id}")
 async def events_socket(socket: WebSocket, workspace_id: str):
     await socket.accept()
-    cursor = 0
+    # REST hydrates the current graph and receipts. The live channel starts at
+    # "now" so a reconnect cannot replay an unbounded historical event stream.
+    cursor = store.latest_sequence(workspace_id)
     try:
         while True:
+            await socket.receive_text()
             events = store.events(workspace_id, cursor)
             for event in events:
                 cursor = event["sequence"]
                 await socket.send_json(event)
-            await socket.receive_text()
     except WebSocketDisconnect:
         return
 

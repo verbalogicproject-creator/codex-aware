@@ -26,6 +26,40 @@ def test_seeded_graph_and_grounded_context(client):
     assert context["grounding"]["source"] == "application-owned semantic graph"
 
 
+def test_repeated_selection_is_idempotent(client):
+    node_ids = ["command:team-todo:delete_task"]
+    first = client.post("/api/workspaces/default/selection", json={"node_ids": node_ids})
+    second = client.post("/api/workspaces/default/selection", json={"node_ids": node_ids})
+
+    assert first.status_code == 200
+    assert first.json()["unchanged"] is False
+    assert second.status_code == 200
+    assert second.json()["unchanged"] is True
+    selection_events = [
+        event
+        for event in client.get("/api/workspaces/default/events").json()
+        if event["kind"] == "context.selection_changed"
+    ]
+    assert len(selection_events) == 1
+
+
+def test_websocket_streams_new_events_without_replaying_history(client):
+    client.post(
+        "/api/workspaces/default/selection",
+        json={"node_ids": ["command:team-todo:delete_task"]},
+    )
+    with client.websocket_connect("/ws/default") as socket:
+        client.post(
+            "/api/workspaces/default/selection",
+            json={"node_ids": ["command:neon-battleship:fire_at"]},
+        )
+        socket.send_text("poll")
+        event = socket.receive_json()
+
+    assert event["kind"] == "context.selection_changed"
+    assert event["payload"]["node_ids"] == ["command:neon-battleship:fire_at"]
+
+
 def test_pair_code_is_single_use(client):
     code = client.post("/api/workspaces/default/pair").json()["code"]
     assert client.post("/api/pair/attach", json={"code": code, "actor_name": "Codex"}).status_code == 200
@@ -125,4 +159,3 @@ def test_unknown_command_fails_closed(client):
         json={"command": "deploy_everything", "arguments": {}},
     ).json()
     assert receipt["status"] == "denied"
-

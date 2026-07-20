@@ -151,6 +151,24 @@ class PostgresStore:
             rows = cursor.fetchall()
         return [{**row, "payload": self._payload(row["payload"])} for row in rows]
 
+    def latest_sequence(self, workspace_id: str) -> int:
+        with self.db.cursor() as cursor:
+            cursor.execute(
+                "SELECT COALESCE(MAX(sequence), 0) AS sequence FROM aware_events WHERE workspace_id=%s",
+                (workspace_id,),
+            )
+            row = cursor.fetchone()
+        return int(row["sequence"])
+
+    def latest_event(self, workspace_id: str, kind: str) -> dict[str, Any] | None:
+        with self.db.cursor() as cursor:
+            cursor.execute(
+                "SELECT * FROM aware_events WHERE workspace_id=%s AND kind=%s ORDER BY sequence DESC LIMIT 1",
+                (workspace_id, kind),
+            )
+            row = cursor.fetchone()
+        return {**row, "payload": self._payload(row["payload"])} if row else None
+
     def create_pair_code(self, workspace_id: str) -> str:
         code = f"{secrets.randbelow(1_000_000):06d}"
         with self.db.cursor() as cursor:

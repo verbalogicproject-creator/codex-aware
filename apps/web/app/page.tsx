@@ -103,6 +103,8 @@ function Workspace() {
   const [notice, setNotice] = useState("Select a node to establish shared context.");
   const ws = useRef<WebSocket | null>(null);
   const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const selectionRequest = useRef<AbortController | null>(null);
+  const lastSelectionKey = useRef("");
   const { fitView } = useReactFlow();
 
   const fetchGraph = useCallback(async () => {
@@ -156,8 +158,14 @@ function Workspace() {
         await fetchGraph();
         setNotice("Policy source, test, and graph now agree.");
       }
-      await fetchReceipts();
-      socket.send("next");
+      if (
+        event.kind === "directive.issued" ||
+        event.kind === "proposal.created" ||
+        event.kind.startsWith("proposal.") ||
+        event.kind === "receipt.finalized"
+      ) {
+        await fetchReceipts();
+      }
     };
   }, [fetchGraph, fetchReceipts]);
 
@@ -167,6 +175,7 @@ function Workspace() {
     connect();
     return () => {
       if (pingTimer.current) clearInterval(pingTimer.current);
+      selectionRequest.current?.abort();
       ws.current?.close();
     };
   }, [connect, fetchGraph, fetchReceipts, fitView]);
@@ -196,18 +205,42 @@ function Workspace() {
     [apiEdges, highlighted],
   );
 
-  const chooseNodes = async (ids: string[]) => {
-    setSelected(ids);
-    const response = await fetch(`${API}/api/workspaces/${WORKSPACE}/selection`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ node_ids: ids }),
-    });
-    const data = await response.json();
-    const contextResponse = await fetch(`${API}/api/workspaces/${WORKSPACE}/context`);
-    setContext(await contextResponse.json());
-    setNotice(`${data.selection.length} stable ${data.selection.length === 1 ? "identity" : "identities"} shared with attached actors.`);
-  };
+  const chooseNodes = useCallback(async (ids: string[]) => {
+    const uniqueIds = [...new Set(ids)];
+    const selectionKey = JSON.stringify(uniqueIds);
+    if (selectionKey === lastSelectionKey.current) return;
+
+    lastSelectionKey.current = selectionKey;
+    setSelected(uniqueIds);
+    selectionRequest.current?.abort();
+    const controller = new AbortController();
+    selectionRequest.current = controller;
+
+    try {
+      const response = await fetch(`${API}/api/workspaces/${WORKSPACE}/selection`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ node_ids: uniqueIds }),
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error("Could not share this selection.");
+      const data = await response.json();
+      const contextResponse = await fetch(`${API}/api/workspaces/${WORKSPACE}/context`, {
+        signal: controller.signal,
+      });
+      if (!contextResponse.ok) throw new Error("Could not resolve this selection.");
+      const nextContext = await contextResponse.json();
+      if (selectionRequest.current !== controller) return;
+      setContext(nextContext);
+      setNotice(`${data.selection.length} stable ${data.selection.length === 1 ? "identity" : "identities"} shared with attached actors.`);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      if (selectionRequest.current === controller) {
+        lastSelectionKey.current = "";
+        setNotice(error instanceof Error ? error.message : "Selection failed. Tap the node to retry.");
+      }
+    }
+  }, []);
 
   const createPair = async () => {
     const response = await fetch(`${API}/api/workspaces/${WORKSPACE}/pair`, { method: "POST" });
@@ -259,6 +292,8 @@ function Workspace() {
   };
 
   const reset = async () => {
+    selectionRequest.current?.abort();
+    lastSelectionKey.current = "";
     await fetch(`${API}/api/workspaces/${WORKSPACE}/reset`, { method: "POST" });
     setSelected([]);
     setHighlighted([]);
@@ -272,6 +307,8 @@ function Workspace() {
   };
 
   const revealArchitecture = async (receipt: Receipt) => {
+    selectionRequest.current?.abort();
+    lastSelectionKey.current = "";
     const response = await fetch(`${API}/api/workspaces/${WORKSPACE}/architecture`);
     const graph = await response.json();
     setApiNodes(graph.nodes);
@@ -339,12 +376,12 @@ function Workspace() {
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
-            onNodeClick={(_, node) => chooseNodes([node.id])}
-            onSelectionChange={({ nodes: chosen }) => {
-              const ids = chosen.map((node) => node.id);
-              if (ids.length) chooseNodes(ids);
+            onNodeClick={(event, node) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void chooseNodes([node.id]);
             }}
-            multiSelectionKeyCode="Shift"
+            nodesDraggable={false}
             fitView
             minZoom={0.35}
             maxZoom={1.8}
