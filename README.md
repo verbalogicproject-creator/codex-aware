@@ -8,6 +8,14 @@ The core loop is:
 
 **Observe → Ground → Resolve → Propose → Gate → Apply → Verify → Receipt**
 
+## Try the live product
+
+- Graph workspace: https://codex-aware-web-jchnbap7ea-zf.a.run.app
+- ChatGPT App MCP: `https://codex-aware-jchnbap7ea-zf.a.run.app/chatgpt/mcp`
+- Service health: https://codex-aware-jchnbap7ea-zf.a.run.app/health
+
+The graph and remote MCP surface share one PostgreSQL-backed continuity log.
+
 ## What changes
 
 An IDE can tell Codex which text is selected. A browser controller can tell it which element was clicked. Codex Aware lets the application say that the selected thing is `delete_task`, where it is declared, what handler and shared state it reaches, whether it is trusted, what the user was doing when it became relevant, and which actions the application will accept.
@@ -53,7 +61,16 @@ Open `http://localhost:3000`, choose **Pair Codex**, then install or point Codex
 
 Run it locally with `make chatgpt`, or deploy it publicly and add its `/mcp` URL as a ChatGPT developer-mode app. The public mobile surface is intentionally read-mostly: durable changes still require the browser-human gate and local Codex performs any authorized source edit.
 
-See [ChatGPT mobile integration](docs/chatgpt-mobile.md).
+See [ChatGPT mobile integration](docs/chatgpt-mobile.md) and the
+[end-to-end dogfood guide](docs/dogfood.md).
+
+For a deterministic cross-surface verification:
+
+```bash
+python scripts/smoke_hosted.py \
+  --api https://codex-aware-jchnbap7ea-zf.a.run.app \
+  --reset
+```
 
 ## Repository map
 
