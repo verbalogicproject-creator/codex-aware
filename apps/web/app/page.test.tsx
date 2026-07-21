@@ -88,6 +88,9 @@ describe("mobile graph selection", () => {
         if (url.endsWith("/context")) {
           return new Response(JSON.stringify({ selection: [graphNode], related: [] }), { status: 200 });
         }
+        if (url.endsWith("/pair")) {
+          return new Response(JSON.stringify({ code: "482193", expires_in: 300 }), { status: 200 });
+        }
         return new Response(JSON.stringify({}), { status: 200 });
       }),
     );
@@ -110,6 +113,17 @@ describe("mobile graph selection", () => {
       );
       expect(selectionCalls).toHaveLength(1);
     });
+    view.unmount();
+  });
+
+  it("shows the pairing code immediately in an accessible dialog", async () => {
+    const view = render(<Home />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Pair Codex" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Attach Codex" });
+    expect(dialog.textContent).toContain("482193");
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Copy pairing code 482193" }));
     view.unmount();
   });
 });

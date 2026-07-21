@@ -94,6 +94,7 @@ function Workspace() {
   const [highlighted, setHighlighted] = useState<string[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [pairCode, setPairCode] = useState<string | null>(null);
+  const [pairing, setPairing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [connected, setConnected] = useState(false);
   const [lens, setLens] = useState<"portfolio" | "incident" | "receipt">("portfolio");
@@ -105,6 +106,7 @@ function Workspace() {
   const pingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const selectionRequest = useRef<AbortController | null>(null);
   const lastSelectionKey = useRef("");
+  const pairCodeButton = useRef<HTMLButtonElement | null>(null);
   const { fitView } = useReactFlow();
 
   const fetchGraph = useCallback(async () => {
@@ -180,6 +182,19 @@ function Workspace() {
     };
   }, [connect, fetchGraph, fetchReceipts, fitView]);
 
+  useEffect(() => {
+    if (!pairCode) return;
+    pairCodeButton.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setPairCode(null);
+        setCopied(false);
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [pairCode]);
+
   const nodes: Node[] = useMemo(
     () =>
       apiNodes.map((node) => ({
@@ -243,9 +258,24 @@ function Workspace() {
   }, []);
 
   const createPair = async () => {
-    const response = await fetch(`${API}/api/workspaces/${WORKSPACE}/pair`, { method: "POST" });
-    const data = await response.json();
-    setPairCode(data.code);
+    setPairing(true);
+    try {
+      const response = await fetch(`${API}/api/workspaces/${WORKSPACE}/pair`, { method: "POST" });
+      if (!response.ok) throw new Error("Pairing is temporarily unavailable.");
+      const data = await response.json();
+      if (!data.code) throw new Error("Pairing code was not returned.");
+      setCopied(false);
+      setPairCode(data.code);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Pairing failed. Please try again.");
+    } finally {
+      setPairing(false);
+    }
+  };
+
+  const closePair = () => {
+    setPairCode(null);
+    setCopied(false);
   };
 
   const copyCode = async () => {
@@ -344,9 +374,38 @@ function Workspace() {
             <span />{connected ? "Live" : "Reconnecting"}
           </span>
           <button className="secondary" onClick={reset} aria-label="Reset workspace"><RotateCcw size={16} /> Reset</button>
-          <button className="primary" onClick={createPair}><Link2 size={16} /> Pair Codex</button>
+          <button
+            aria-expanded={Boolean(pairCode)}
+            aria-haspopup="dialog"
+            className="primary"
+            disabled={pairing}
+            onClick={createPair}
+          >
+            <Link2 size={16} /> {pairing ? "Pairing…" : "Pair Codex"}
+          </button>
         </div>
       </header>
+
+      {pairCode && (
+        <div className="pair-overlay" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) closePair();
+        }}>
+          <section
+            aria-describedby="pair-description"
+            aria-labelledby="pair-title"
+            aria-modal="true"
+            className="panel pair-panel pair-dialog"
+            role="dialog"
+          >
+            <div className="panel-title" id="pair-title"><TerminalSquare size={16} /> Attach Codex</div>
+            <p id="pair-description">Use this single-use code from the Codex Aware plugin. It expires in five minutes.</p>
+            <button aria-label={`Copy pairing code ${pairCode}`} className="pair-code" onClick={copyCode} ref={pairCodeButton}>
+              {pairCode}<span>{copied ? <Check size={15} /> : <Copy size={15} />}</span>
+            </button>
+            <button className="close-pair" onClick={closePair} aria-label="Close pairing"><X size={16} /></button>
+          </section>
+        </div>
+      )}
 
       <section className="hero">
         <div>
@@ -395,27 +454,18 @@ function Workspace() {
         </div>
 
         <aside>
-          {pairCode ? (
-            <div className="panel pair-panel">
-              <div className="panel-title"><TerminalSquare size={16} /> Attach an actor</div>
-              <p>Use this single-use code from the Codex Aware plugin. It expires in five minutes.</p>
-              <button className="pair-code" onClick={copyCode}>{pairCode}<span>{copied ? <Check size={15} /> : <Copy size={15} />}</span></button>
-              <button className="close-pair" onClick={() => setPairCode(null)} aria-label="Close pairing"><X size={16} /></button>
-            </div>
-          ) : (
-            <div className="panel">
-              <div className="panel-title"><Network size={16} /> Shared context</div>
-              {selectedNodes.length ? selectedNodes.map((node) => (
-                <div className="selection-card" key={node.id}>
-                  <span>{node.project || "Codex Aware"}</span>
-                  <strong>{node.label}</strong>
-                  <small>{node.uri || node.summary}</small>
-                  {node.safety_class && <em style={{ color: safetyColor(node.safety_class) }}>{node.safety_class.replace("_", " ")}</em>}
-                </div>
-              )) : <p>Select a node. Its stable identity—not screen coordinates—becomes shared context.</p>}
-              {context && <div className="context-proof"><ShieldCheck size={15} /><span>Grounded in application-owned identities</span></div>}
-            </div>
-          )}
+          <div className="panel">
+            <div className="panel-title"><Network size={16} /> Shared context</div>
+            {selectedNodes.length ? selectedNodes.map((node) => (
+              <div className="selection-card" key={node.id}>
+                <span>{node.project || "Codex Aware"}</span>
+                <strong>{node.label}</strong>
+                <small>{node.uri || node.summary}</small>
+                {node.safety_class && <em style={{ color: safetyColor(node.safety_class) }}>{node.safety_class.replace("_", " ")}</em>}
+              </div>
+            )) : <p>Select a node. Its stable identity—not screen coordinates—becomes shared context.</p>}
+            {context && <div className="context-proof"><ShieldCheck size={15} /><span>Grounded in application-owned identities</span></div>}
+          </div>
 
           {lens !== "receipt" && (
             <div className="panel">

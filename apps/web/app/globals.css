@@ -96,6 +96,8 @@ dd { margin: 0; text-align: right; }
 .approve { color: #05140d; background: var(--green); border-color: var(--green); font-weight: 700; }
 .hash { display: block; color: #65798c; margin-top: 9px; font-family: ui-monospace, monospace; }
 .pair-panel { border-color: rgba(103,216,255,.4); }
+.pair-overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 18px; background: rgba(2,8,13,.78); backdrop-filter: blur(8px); }
+.pair-dialog { width: min(420px, 100%); margin: 0; padding: 18px; box-shadow: 0 24px 80px rgba(0,0,0,.55); }
 .pair-code { width: 100%; min-height: 58px; justify-content: space-between; font: 700 25px/1 ui-monospace, monospace; letter-spacing: .18em; color: var(--cyan); }
 .pair-code span { color: var(--muted); }
 .close-pair { position: absolute; top: 8px; right: 8px; width: 30px; min-height: 30px; padding: 0; border: 0; background: transparent; }
@@ -133,4 +135,3 @@ footer { min-height: 58px; padding: 0 clamp(16px, 3vw, 46px); display: flex; ali
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
-
