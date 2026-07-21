@@ -67,7 +67,8 @@ receipt.
 
 ## 0:57–1:29 — Authority remains application-owned
 
-**Picture:** Reset, then choose **Select active incident**. Frame Team Todo's
+**Picture:** Choose **Select active incident** without resetting the workspace.
+Frame Team Todo's
 amber `delete_task` and Battleship's green `fire_at`. Request **Propose safe
 boundary** and show the approval panel.
 
