@@ -61,6 +61,7 @@ type Receipt = {
   };
   created_at: number;
 };
+type RevealDirective = { id: string; kind: string; target_ids: string[] };
 
 const API = process.env.NEXT_PUBLIC_AWARE_API_URL || "http://localhost:8000";
 const WORKSPACE = "default";
@@ -107,6 +108,7 @@ function Workspace() {
   const selectionRequest = useRef<AbortController | null>(null);
   const lastSelectionKey = useRef("");
   const pairCodeButton = useRef<HTMLButtonElement | null>(null);
+  const consumingDirectives = useRef(new Set<string>());
   const { fitView } = useReactFlow();
 
   const fetchGraph = useCallback(async () => {
@@ -117,10 +119,67 @@ function Workspace() {
     setApiEdges(graph.edges);
   }, []);
 
-  const fetchReceipts = useCallback(async () => {
+  const fetchReceipts = useCallback(async (): Promise<Receipt[]> => {
     const response = await fetch(`${API}/api/workspaces/${WORKSPACE}/receipts`);
-    if (response.ok) setReceipts(await response.json());
+    if (!response.ok) return [];
+    const nextReceipts: Receipt[] = await response.json();
+    setReceipts(nextReceipts);
+    return nextReceipts;
   }, []);
+
+  const consumeReveal = useCallback(async (receiptId: string, directive: RevealDirective) => {
+    if (consumingDirectives.current.has(directive.id)) return;
+    consumingDirectives.current.add(directive.id);
+
+    try {
+      // A receipt detail swaps in the architecture trace graph. Restore the
+      // running application graph before claiming that its nodes were shown.
+      await fetchGraph();
+      setHighlighted(directive.target_ids);
+      setLens("incident");
+      setActiveReceipt(null);
+      setNotice(`Observed blast radius across ${directive.target_ids.length} semantic entities.`);
+
+      // Let React commit and paint the visual effect before emitting the ACK.
+      // Dispatch alone is never treated as successful.
+      await new Promise<void>((resolve) => {
+        const schedule = window.requestAnimationFrame
+          ? window.requestAnimationFrame.bind(window)
+          : (callback: FrameRequestCallback) => window.setTimeout(callback, 0);
+        schedule(() => schedule(() => resolve()));
+      });
+
+      const response = await fetch(`${API}/api/workspaces/${WORKSPACE}/effects`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          receipt_id: receiptId,
+          directive_id: directive.id,
+          observed: {
+            target_count: directive.target_ids.length,
+            target_ids: directive.target_ids,
+          },
+        }),
+      });
+      if (!response.ok) throw new Error("The visual effect could not be acknowledged.");
+      await fetchReceipts();
+    } catch (error) {
+      consumingDirectives.current.delete(directive.id);
+      setNotice(error instanceof Error ? error.message : "The pending reveal will retry when this page resumes.");
+    }
+  }, [fetchGraph, fetchReceipts]);
+
+  const recoverPendingReveal = useCallback(async () => {
+    const nextReceipts = await fetchReceipts();
+    const pending = nextReceipts.find(
+      (receipt) =>
+        receipt.status === "awaiting_consumer" &&
+        receipt.payload.directive?.kind === "graph.reveal",
+    );
+    if (pending?.payload.directive) {
+      await consumeReveal(pending.id, pending.payload.directive);
+    }
+  }, [consumeReveal, fetchReceipts]);
 
   const connect = useCallback(() => {
     const socketUrl = API.replace(/^http/, "ws") + `/ws/${WORKSPACE}`;
@@ -129,6 +188,7 @@ function Workspace() {
     socket.onopen = () => {
       setConnected(true);
       socket.send("ready");
+      void recoverPendingReveal();
       if (pingTimer.current) clearInterval(pingTimer.current);
       pingTimer.current = setInterval(() => {
         if (socket.readyState === WebSocket.OPEN) socket.send("poll");
@@ -142,19 +202,7 @@ function Workspace() {
     socket.onmessage = async (message) => {
       const event = JSON.parse(message.data);
       if (event.kind === "directive.issued" && event.payload.kind === "graph.reveal") {
-        const targets: string[] = event.payload.target_ids;
-        setHighlighted(targets);
-        setLens("incident");
-        setNotice(`Observed blast radius across ${targets.length} semantic entities.`);
-        await fetch(`${API}/api/workspaces/${WORKSPACE}/effects`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            receipt_id: event.payload.receipt_id,
-            directive_id: event.payload.id,
-            observed: { target_count: targets.length, target_ids: targets },
-          }),
-        });
+        await consumeReveal(event.payload.receipt_id, event.payload);
       }
       if (event.kind === "repository.refreshed") {
         await fetchGraph();
@@ -169,7 +217,7 @@ function Workspace() {
         await fetchReceipts();
       }
     };
-  }, [fetchGraph, fetchReceipts]);
+  }, [consumeReveal, fetchGraph, fetchReceipts, recoverPendingReveal]);
 
   useEffect(() => {
     fetchGraph().then(() => window.setTimeout(() => fitView({ padding: 0.16 }), 100));
@@ -181,6 +229,20 @@ function Workspace() {
       ws.current?.close();
     };
   }, [connect, fetchGraph, fetchReceipts, fitView]);
+
+  useEffect(() => {
+    const recoverWhenVisible = () => {
+      if (document.visibilityState === "visible") void recoverPendingReveal();
+    };
+    document.addEventListener("visibilitychange", recoverWhenVisible);
+    window.addEventListener("pageshow", recoverWhenVisible);
+    window.addEventListener("focus", recoverWhenVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", recoverWhenVisible);
+      window.removeEventListener("pageshow", recoverWhenVisible);
+      window.removeEventListener("focus", recoverWhenVisible);
+    };
+  }, [recoverPendingReveal]);
 
   useEffect(() => {
     if (!pairCode) return;

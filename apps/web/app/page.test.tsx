@@ -54,6 +54,8 @@ const graphNode = {
   metadata: {},
 };
 
+let receiptPayload: Array<Record<string, unknown>> = [];
+
 class WebSocketMock {
   static OPEN = 1;
   readyState = WebSocketMock.OPEN;
@@ -71,6 +73,7 @@ class WebSocketMock {
 
 describe("mobile graph selection", () => {
   beforeEach(() => {
+    receiptPayload = [];
     vi.stubGlobal("WebSocket", WebSocketMock);
     vi.stubGlobal(
       "fetch",
@@ -80,7 +83,7 @@ describe("mobile graph selection", () => {
           return new Response(JSON.stringify({ nodes: [graphNode], edges: [] }), { status: 200 });
         }
         if (url.endsWith("/receipts")) {
-          return new Response(JSON.stringify([]), { status: 200 });
+          return new Response(JSON.stringify(receiptPayload), { status: 200 });
         }
         if (url.endsWith("/selection")) {
           return new Response(JSON.stringify({ selection: [graphNode], unchanged: false }), { status: 200 });
@@ -124,6 +127,43 @@ describe("mobile graph selection", () => {
     const dialog = await screen.findByRole("dialog", { name: "Attach Codex" });
     expect(dialog.textContent).toContain("482193");
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Copy pairing code 482193" }));
+    view.unmount();
+  });
+
+  it("recovers a reveal issued while the mobile browser was suspended", async () => {
+    receiptPayload = [{
+      id: "receipt-1",
+      trace_id: "trace-1",
+      command: "reveal_blast_radius",
+      status: "awaiting_consumer",
+      payload: {
+        directive: {
+          id: "directive-1",
+          kind: "graph.reveal",
+          target_ids: [graphNode.id],
+        },
+      },
+      created_at: 1,
+    }];
+
+    const view = render(<Home />);
+
+    await waitFor(() => {
+      const effectCall = vi.mocked(fetch).mock.calls.find(([input]) =>
+        String(input).endsWith("/effects"),
+      );
+      expect(effectCall).toBeDefined();
+      expect(JSON.parse(String(effectCall?.[1]?.body))).toMatchObject({
+        receipt_id: "receipt-1",
+        directive_id: "directive-1",
+        observed: { target_ids: [graphNode.id] },
+      });
+    });
+
+    expect(screen.getByRole("button", { name: "incident" }).className).toContain("active");
+    expect(screen.getAllByRole("status").some((item) =>
+      item.textContent?.includes("Observed blast radius"),
+    )).toBe(true);
     view.unmount();
   });
 });
