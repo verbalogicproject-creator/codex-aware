@@ -1,64 +1,154 @@
-# Product Demonstration — 2:45
+# Codex Aware — Final Demonstration Script
 
-This is a product demonstration. Do not mention judging, scoring, Build Week, or hackathon constraints in the recording.
+**Target runtime:** 2:45–2:55
 
-## 0:00–0:08
+**Hard limit:** 2:59
 
-Show the four-project graph.
+**Format:** 1080p landscape, deliberate cursor, readable zoom, captions enabled
 
-Voice: “Point at your running software. Codex already knows what you mean.”
+The application itself remains product-only. Do not put Build Week, judging,
+scores, or competition language inside the product UI.
 
-## 0:08–0:30
+## Preflight
 
-Select Team Todo `delete_task` and Battleship `fire_at`.
+1. Confirm `/status` shows the intended GPT-5.6 model.
+2. Open the deployed graph and reset it.
+3. Attach Codex with a fresh one-time pairing code and verify `/mcp`.
+4. Close notifications and unrelated tabs.
+5. Rehearse the exact node, action, proposal, test, and receipt sequence once.
+6. Record two complete takes before attempting detailed edits.
 
-Voice: “These come from different applications. I have selected them visually—no file paths, no copied code.”
+---
 
-## 0:30–0:52
+## 0:00–0:08 — The hook
 
-Switch to Codex or ChatGPT Android and ask: “What is happening here?”
+**Picture:** Start on the deployed four-application graph. No introductory
+slide. Select **Game engine**.
 
-Voice: “The applications supply stable identity, source location, runtime relationships, and current authority. The model does not have to rediscover what ‘these’ means.”
+**Voice:**
 
-## 0:52–1:12
+> This is Codex Aware. I just selected something inside a running application.
+> Now I will ask Codex what it was.
 
-Request “Reveal the blast radius.” Return to the graph as affected nodes illuminate.
+## 0:08–0:31 — Independent semantic resolution
 
-Voice: “This is a semantic action, not a generated click. The receipt is still pending until the browser observes the effect.”
+**Picture:** Switch to the already attached Codex session. Enter:
 
-## 1:12–1:40
+```text
+What node is highlighted?
+```
 
-Show the safety difference and request the classification proposal.
+Hold long enough to show the answer: **Game engine**, Neon Battleship,
+authoritative shot outcome, related phase-and-turn guard.
 
-Voice: “Both commands mutate state. Battleship declares runtime guards. Team Todo’s imported delete command has no application-neutral safety policy.”
+**Voice:**
 
-Approve once in the browser.
+> Codex is running in another process. I sent no screenshot, DOM, coordinate,
+> or file path. The application published one stable semantic identity, and
+> Codex resolved its runtime meaning and relationships.
 
-## 1:40–2:05
+## 0:31–0:57 — The channel works in reverse
 
-In Codex, patch the two adapter fields. Run:
+**Picture:** In Codex, enter:
+
+```text
+Reveal the blast radius.
+```
+
+Switch back to the browser as the related entities illuminate. Open the newest
+receipt.
+
+**Voice:**
+
+> The same channel works in reverse. Codex requested a semantic intention, not
+> a generated click. The application decided how to render it. Dispatch was not
+> treated as success; the receipt finalized only after the browser observed
+> eight affected entities.
+
+## 0:57–1:29 — Authority remains application-owned
+
+**Picture:** Reset, then choose **Select active incident**. Frame Team Todo's
+amber `delete_task` and Battleship's green `fire_at`. Request **Propose safe
+boundary** and show the approval panel.
+
+**Voice:**
+
+> Context is not authority. These commands both mutate state, but Battleship
+> declares phase and turn guards while Team Todo's imported delete command is
+> unclassified. Codex may propose an exact policy boundary, but it cannot
+> approve its own proposal. That decision belongs to the human in the browser.
+
+## 1:29–1:54 — Bounded change, test, and refresh
+
+**Picture:** Approve once. Use quick, readable cuts: Codex patches the two
+adapter fields; terminal runs the focused test; Codex calls `aware_refresh`.
+
+Show this test command and its passing result:
 
 ```bash
 python scripts/check_policy.py examples/team-todo/aware.yaml --require-protected
 ```
 
-Call `aware_refresh`.
+**Voice:**
 
-## 2:05–2:25
+> After one hash-bound approval, Codex changes only the declared adapter fields,
+> runs the focused conformance test, and publishes a sanitized snapshot. It
+> never receives authority to delete a task.
 
-Show amber becoming green and open the final receipt.
+## 1:54–2:17 — The receipt explains the result
 
-Voice: “Selection, grounding, human authority, diff, test, refresh, and observed effect are one causal record.”
+**Picture:** Return to the graph as amber becomes green. Open the final receipt,
+then its architecture view.
 
-## 2:25–2:37
+**Voice:**
 
-Open the receipt’s architecture graph.
+> This is not just a transcript. Selection, grounding, actor, gate, approval,
+> test, directive, observed effect, and resulting state share one causal record.
+> The receipt can reveal the resolver, policy gate, event log, database,
+> observer, source declaration, and test that produced it.
 
-Voice: “The same graph can explain the resolver, gate, directive, database, observer, and test that made the result trustworthy.”
+## 2:17–2:39 — How Codex and GPT-5.6 built it
 
-## 2:37–2:45
+**Picture:** Brief cuts of the public repository, test output, green GitHub
+Actions run, and Cloud Run services. Keep every shot readable.
 
-Show the origin artifact briefly, then return to the product.
+**Voice:**
 
-Voice: “When software can describe itself through the same surface by which it is safely controlled, intelligence becomes attachable rather than embedded.”
+> I used Codex with GPT-5.6 to audit four existing applications, extract their
+> shared architectural pattern, design this continuity protocol, implement the
+> new product, generate its tests, and deploy it. During mobile dogfooding,
+> Codex traced an Android event storm through production logs, fixed it at three
+> layers, added a regression test, and redeployed both services.
 
+## 2:39–2:55 — Take a step back
+
+**Picture:** Return to the clean portfolio graph. End on a simple card with:
+
+```text
+Codex Aware
+Point at your running software. Codex already knows what you mean.
+codex-aware-web-jchnbap7ea-zf.a.run.app
+github.com/verbalogicproject-creator/codex-aware
+```
+
+**Voice:**
+
+> Today, every application builds a bespoke AI integration. Codex Aware gives
+> developers an application-owned contract for live meaning, authority, and
+> verified effects. When software can describe itself through the same governed
+> surface by which it is safely controlled, intelligence becomes attachable,
+> rather than embedded.
+
+---
+
+## Recording safeguards
+
+- Do not expose pairing tokens, provider credentials, Cloud SQL URLs, or local
+  absolute paths.
+- Showing the six-digit one-time pairing code is acceptable only after it has
+  been consumed; cut away before showing the resulting token.
+- Do not claim that dispatch equals execution. Show the observed receipt.
+- Do not call the submission a POC. Present it as a working developer product
+  with a deployed demonstration.
+- If a live step hesitates, pause and repeat the take. Do not explain around a
+  failure in the final edit.
